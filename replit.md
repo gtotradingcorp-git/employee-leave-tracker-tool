@@ -1,0 +1,88 @@
+# GTO Trading Corporation Leave Management System
+
+## Overview
+A comprehensive Leave Management System for GTO Trading Corporation serving 200+ employees across 11 departments. The system features role-based access control, PTO credit tracking with LWOP handling, leave filing with 7 leave types, approval workflows, file attachments via object storage, and audit logging.
+
+## Project Architecture
+
+### Tech Stack
+- **Frontend**: React + TypeScript + Vite + TailwindCSS + shadcn/ui
+- **Backend**: Express.js + TypeScript
+- **Database**: PostgreSQL (Neon) with Drizzle ORM
+- **Authentication**: Passport.js with session-based auth
+- **File Storage**: Replit Object Storage
+- **Styling**: TailwindCSS with GTO brand colors (black/gold)
+
+### Directory Structure
+```
+├── client/src/
+│   ├── pages/           # React page components
+│   │   ├── login.tsx    # Login page
+│   │   ├── register.tsx # Registration page
+│   │   ├── dashboard.tsx # Employee dashboard
+│   │   ├── file-leave.tsx # Leave filing form
+│   │   ├── my-leaves.tsx # Leave history
+│   │   ├── approvals.tsx # Manager approvals
+│   │   ├── employees.tsx # HR employee directory
+│   │   ├── reports.tsx   # HR reports & analytics
+│   │   ├── admin.tsx     # IT admin panel
+│   │   └── executive.tsx # Executive dashboard
+│   ├── components/
+│   │   ├── ui/          # shadcn/ui components
+│   │   ├── app-sidebar.tsx # Navigation sidebar
+│   │   ├── status-badge.tsx # Status indicators
+│   │   └── leave-type-icon.tsx # Leave type icons
+│   ├── hooks/           # Custom React hooks
+│   └── lib/             # Utilities and auth
+├── server/
+│   ├── routes.ts        # API endpoints
+│   ├── storage.ts       # Database operations
+│   └── db.ts            # Database connection
+└── shared/
+    └── schema.ts        # Database schema & types
+```
+
+### User Roles
+1. **Employee** - File leaves, view own history
+2. **Manager** - Approve leaves for department
+3. **HR** - View all employees, generate reports
+4. **Admin (IT)** - User management, audit logs
+5. **Top Management** - Executive dashboard
+
+### Key Features
+- Email restricted to @gtotradingcorp.com domain
+- 5 PTO credits per employee per year
+- LWOP handling when PTO exhausted
+- 7 leave types: Vacation, Sick, Emergency, Bereavement, Maternity, Paternity, Indefinite
+- File attachments for leave requests
+- Approval workflow with audit logging
+- PDF/Excel report generation
+- Dark mode support
+
+### API Endpoints
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `GET /api/auth/me` - Current user
+- `GET /api/dashboard` - Dashboard stats
+- `POST /api/leave-requests` - File leave
+- `GET /api/leave-requests` - User's leaves
+- `GET /api/leave-requests/pending` - Pending approvals
+- `PATCH /api/leave-requests/:id/approve` - Approve leave
+- `PATCH /api/leave-requests/:id/reject` - Reject leave
+- `GET /api/employees` - Employee list (HR/Admin)
+- `GET /api/reports` - Analytics (HR/Admin)
+- `GET /api/executive/dashboard` - Executive view
+
+## Recent Changes
+- 2026-01-15: Initial system implementation with all core features
+- 2026-01-15: Fixed frontend-backend API alignment
+- 2026-01-15: Added department scoping for manager approvals
+- 2026-01-15: Improved PTO/LWOP audit logging accuracy
+- 2026-01-15: Enhanced session security with environment-aware configuration
+
+## Development Notes
+- Run `npm run dev` to start the application
+- Run `npm run db:push` to sync database schema
+- SESSION_SECRET environment variable is required
+- Design follows design_guidelines.md for GTO branding

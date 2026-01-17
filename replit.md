@@ -9,7 +9,7 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - **Frontend**: React + TypeScript + Vite + TailwindCSS + shadcn/ui
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL (Neon) with Drizzle ORM
-- **Authentication**: Passport.js with session-based auth
+- **Authentication**: Replit Auth (OIDC) with session-based auth
 - **File Storage**: Replit Object Storage
 - **Styling**: TailwindCSS with GTO brand colors (black/gold)
 
@@ -17,8 +17,8 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 ```
 ├── client/src/
 │   ├── pages/           # React page components
-│   │   ├── login.tsx    # Login page
-│   │   ├── register.tsx # Registration page
+│   │   ├── login.tsx    # Login page (Replit Auth)
+│   │   ├── complete-profile.tsx # Profile completion for new users
 │   │   ├── dashboard.tsx # Employee dashboard
 │   │   ├── file-leave.tsx # Leave filing form
 │   │   ├── my-leaves.tsx # Leave history
@@ -50,7 +50,7 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 5. **Top Management** - Executive dashboard
 
 ### Key Features
-- Email restricted to @gtotradingcorp.com domain
+- Replit Auth with profile completion for new users
 - 5 PTO credits per employee per year
 - LWOP handling when PTO exhausted
 - 7 leave types: Vacation, Sick, Emergency, Bereavement, Maternity, Paternity, Indefinite
@@ -60,10 +60,11 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - Dark mode support
 
 ### API Endpoints
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/me` - Current user
+- `GET /api/login` - Initiate Replit Auth OIDC login
+- `GET /api/callback` - Replit Auth callback
+- `GET /api/logout` - User logout
+- `GET /api/auth/me` - Current user with profile completion status
+- `POST /api/auth/complete-profile` - Complete profile for new users
 - `GET /api/dashboard` - Dashboard stats
 - `POST /api/leave-requests` - File leave
 - `GET /api/leave-requests` - User's leaves
@@ -83,6 +84,9 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - 2026-01-17: Added designated leave approvers per department
 - 2026-01-17: Department is now unchangeable after registration (read-only in admin panel)
 - 2026-01-17: Approval workflow updated to route only to designated approvers or HR/Admin
+- 2026-01-17: Integrated Replit Auth (OIDC) replacing email/password authentication
+- 2026-01-17: Added profile completion flow for new Replit Auth users
+- 2026-01-17: Users table extended with firstName, lastName, profileImageUrl, isProfileComplete fields
 
 ## Development Notes
 - Run `npm run dev` to start the application

@@ -43,13 +43,13 @@ export default function CompleteProfilePage() {
       const response = await apiRequest("POST", "/api/auth/complete-profile", data);
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({
         title: "Profile completed!",
         description: "Welcome to GTO Leave Management System.",
       });
-      navigate("/dashboard");
+      window.location.href = "/dashboard";
     },
     onError: (error: Error) => {
       toast({

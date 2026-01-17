@@ -71,7 +71,7 @@ export default function LoginPage() {
             />
             <div className="text-center">
               <h1 className="text-2xl font-semibold tracking-tight">
-                Leave Management System
+                Employee Leave Tracker Tool
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 Sign in to manage your leave requests

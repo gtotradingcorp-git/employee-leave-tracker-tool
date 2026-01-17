@@ -107,7 +107,7 @@ export function AppSidebar() {
         <Link href="/dashboard" className="flex items-center gap-2">
           <img src={gtoLogo} alt="GTO Trading Corporation" className="h-10 w-auto" />
         </Link>
-        <p className="text-xs text-muted-foreground mt-1">Leave Management System</p>
+        <p className="text-xs text-muted-foreground mt-1">Employee Leave Tracker</p>
       </SidebarHeader>
 
       <SidebarContent>

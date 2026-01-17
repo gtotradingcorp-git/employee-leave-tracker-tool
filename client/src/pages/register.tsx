@@ -70,7 +70,7 @@ export default function RegisterPage() {
       });
       toast({
         title: "Registration successful",
-        description: "Your account has been created. Welcome to GTO LMS!",
+        description: "Your account has been created. Welcome to the Employee Leave Tracker!",
       });
       navigate("/dashboard");
     } catch (error) {
@@ -103,7 +103,7 @@ export default function RegisterPage() {
                 Employee Registration
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Create your LMS account using your corporate email
+                Create your account using your corporate or Gmail email
               </p>
             </div>
           </div>
@@ -112,7 +112,7 @@ export default function RegisterPage() {
             <CardHeader>
               <CardTitle>Create Account</CardTitle>
               <CardDescription>
-                Fill in your details to register for the Leave Management System
+                Fill in your details to register for the Employee Leave Tracker
               </CardDescription>
             </CardHeader>
             <CardContent>

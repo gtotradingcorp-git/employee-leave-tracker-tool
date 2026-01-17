@@ -80,6 +80,9 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - 2026-01-15: Added department scoping for manager approvals
 - 2026-01-15: Improved PTO/LWOP audit logging accuracy
 - 2026-01-15: Enhanced session security with environment-aware configuration
+- 2026-01-17: Added designated leave approvers per department
+- 2026-01-17: Department is now unchangeable after registration (read-only in admin panel)
+- 2026-01-17: Approval workflow updated to route only to designated approvers or HR/Admin
 
 ## Development Notes
 - Run `npm run dev` to start the application

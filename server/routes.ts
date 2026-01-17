@@ -1,13 +1,29 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import bcrypt from "bcrypt";
 import { storage } from "./storage";
-import { insertLeaveRequestSchema, type User } from "@shared/schema";
+import { insertUserSchema, insertLeaveRequestSchema, loginSchema, type User } from "@shared/schema";
 import { z } from "zod";
 import { Storage } from "@google-cloud/storage";
-import { setupAuth, isAuthenticated, registerAuthRoutes } from "./replit_integrations/auth";
+import { pool } from "./db";
 
-// Profile completion schema
-const completeProfileSchema = z.object({
+// Extend Express session
+declare module "express-session" {
+  interface SessionData {
+    userId: string;
+  }
+}
+
+// Email validation schema for registration
+const registrationSchema = z.object({
+  email: z.string().email().refine(
+    (email) => email.endsWith("@gtotradingcorp.com") || email.endsWith("@gmail.com"),
+    { message: "Only @gtotradingcorp.com or @gmail.com email addresses are allowed" }
+  ),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  fullName: z.string().min(2, "Full name is required"),
   employeeId: z.string().min(1, "Employee ID is required"),
   department: z.enum([
     "human_resources",
@@ -23,11 +39,18 @@ const completeProfileSchema = z.object({
     "top_management"
   ]),
   position: z.string().min(1, "Position is required"),
+  employeeLevel: z.enum([
+    "rank_and_file",
+    "supervisor",
+    "manager",
+    "executive",
+    "top_management"
+  ]).optional().default("rank_and_file"),
 });
 
-// Helper to get user ID from Replit Auth session
+// Helper to get user ID from session
 function getUserId(req: Request): string | undefined {
-  return (req.user as any)?.claims?.sub;
+  return req.session?.userId;
 }
 
 // Helper to get current user from database
@@ -35,6 +58,15 @@ async function getCurrentUser(req: Request): Promise<User | undefined> {
   const userId = getUserId(req);
   if (!userId) return undefined;
   return await storage.getUser(userId);
+}
+
+// Authentication middleware
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.userId) {
+    next();
+  } else {
+    res.status(401).json({ error: "Unauthorized" });
+  }
 }
 
 // Middleware to check if user has completed their profile
@@ -77,64 +109,130 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Setup Replit Auth (handles session, passport, login/logout routes)
-  await setupAuth(app);
-  registerAuthRoutes(app);
+  // Setup session with PostgreSQL store
+  const PgSession = connectPgSimple(session);
+  
+  app.use(
+    session({
+      store: new PgSession({
+        pool: pool,
+        tableName: "sessions",
+        createTableIfMissing: true,
+      }),
+      secret: process.env.SESSION_SECRET || "gto-leave-management-secret",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      },
+    })
+  );
 
-  // Profile completion endpoint - for new users who logged in via Replit Auth
-  app.post("/api/auth/complete-profile", isAuthenticated, async (req, res) => {
+  // Registration endpoint
+  app.post("/api/auth/register", async (req, res) => {
     try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
+      const data = registrationSchema.parse(req.body);
+      
+      // Check if email is already registered
+      const existingUser = await storage.getUserByEmail(data.email);
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already registered" });
       }
       
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      
-      if (user.isProfileComplete) {
-        return res.status(400).json({ error: "Profile already complete" });
-      }
-      
-      const data = completeProfileSchema.parse(req.body);
-      
-      // Check if employee ID is already taken
+      // Check if employee ID is already registered
       const existingEmployeeId = await storage.getUserByEmployeeId(data.employeeId);
-      if (existingEmployeeId && existingEmployeeId.id !== userId) {
+      if (existingEmployeeId) {
         return res.status(400).json({ error: "Employee ID already registered" });
       }
       
-      // Update user profile
-      await storage.completeUserProfile(userId, {
+      // Hash the password
+      const hashedPassword = await bcrypt.hash(data.password, 10);
+      
+      // Create the user
+      const user = await storage.createUser({
+        email: data.email,
+        password: hashedPassword,
+        fullName: data.fullName,
         employeeId: data.employeeId,
         department: data.department,
         position: data.position,
+        employeeLevel: data.employeeLevel,
+        isProfileComplete: true,
       });
       
       // Create PTO credits for the user
       await storage.createPtoCredits({
-        userId,
+        userId: user.id,
         totalCredits: 5,
         usedCredits: 0,
         lwopDays: 0,
         year: new Date().getFullYear(),
       });
       
-      const userWithCredits = await storage.getUserWithPtoCredits(userId);
+      // Set session
+      req.session.userId = user.id;
+      
+      const userWithCredits = await storage.getUserWithPtoCredits(user.id);
+      const { password: _, ...safeUser } = userWithCredits!;
+      res.status(201).json(safeUser);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0].message });
+      }
+      console.error("Registration error:", error);
+      res.status(500).json({ error: "Failed to register" });
+    }
+  });
+
+  // Login endpoint
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const data = loginSchema.parse(req.body);
+      
+      const user = await storage.getUserByEmail(data.email);
+      if (!user || !user.password) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      
+      const isValidPassword = await bcrypt.compare(data.password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      
+      if (!user.isActive) {
+        return res.status(403).json({ error: "Account is deactivated" });
+      }
+      
+      // Set session
+      req.session.userId = user.id;
+      
+      const userWithCredits = await storage.getUserWithPtoCredits(user.id);
       const { password: _, ...safeUser } = userWithCredits!;
       res.json(safeUser);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message });
       }
-      console.error("Profile completion error:", error);
-      res.status(500).json({ error: "Failed to complete profile" });
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Failed to login" });
     }
   });
 
-  // Get current user (works for both complete and incomplete profiles)
+  // Logout endpoint
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Logout error:", err);
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // Get current user
   app.get("/api/auth/me", isAuthenticated, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) {
@@ -630,35 +728,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get presigned URL error:", error);
       res.status(500).json({ error: "Failed to generate upload URL" });
-    }
-  });
-
-  app.post("/api/leave-requests/:id/attachments", requireAuth, async (req, res) => {
-    try {
-      const { fileName, filePath, fileSize, mimeType } = req.body;
-      const leaveRequestId = req.params.id;
-      
-      const leaveRequest = await storage.getLeaveRequest(leaveRequestId);
-      if (!leaveRequest) {
-        return res.status(404).json({ error: "Leave request not found" });
-      }
-      
-      if (leaveRequest.userId !== getUserId(req)) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      
-      const attachment = await storage.createLeaveAttachment({
-        leaveRequestId,
-        fileName,
-        filePath,
-        fileSize,
-        mimeType,
-      });
-      
-      res.status(201).json(attachment);
-    } catch (error) {
-      console.error("Create attachment error:", error);
-      res.status(500).json({ error: "Failed to create attachment" });
     }
   });
 

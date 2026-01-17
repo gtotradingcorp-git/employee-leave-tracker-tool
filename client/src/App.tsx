@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
-import CompleteProfilePage from "@/pages/complete-profile";
+import RegisterPage from "@/pages/register";
 import DashboardPage from "@/pages/dashboard";
 import FileLeaveRequestPage from "@/pages/file-leave";
 import MyLeavesPage from "@/pages/my-leaves";
@@ -21,8 +21,7 @@ import AdminPage from "@/pages/admin";
 import ExecutiveDashboardPage from "@/pages/executive";
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
-  const { user, isLoading, isProfileComplete } = useAuth();
-  const [, navigate] = useLocation();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -37,10 +36,6 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 
   if (!user) {
     return <Redirect to="/login" />;
-  }
-
-  if (!isProfileComplete) {
-    return <Redirect to="/complete-profile" />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -75,7 +70,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 }
 
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isProfileComplete } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -88,36 +83,7 @@ function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (user && isProfileComplete) {
-    return <Redirect to="/dashboard" />;
-  }
-
-  if (user && !isProfileComplete) {
-    return <Redirect to="/complete-profile" />;
-  }
-
-  return <>{children}</>;
-}
-
-function ProfileCompletionRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isProfileComplete } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="space-y-4 text-center">
-          <Skeleton className="h-12 w-12 mx-auto rounded-full" />
-          <Skeleton className="h-4 w-32 mx-auto" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
-
-  if (isProfileComplete) {
+  if (user) {
     return <Redirect to="/dashboard" />;
   }
 
@@ -133,10 +99,10 @@ function Router() {
         </PublicOnlyRoute>
       </Route>
       
-      <Route path="/complete-profile">
-        <ProfileCompletionRoute>
-          <CompleteProfilePage />
-        </ProfileCompletionRoute>
+      <Route path="/register">
+        <PublicOnlyRoute>
+          <RegisterPage />
+        </PublicOnlyRoute>
       </Route>
       
       <Route path="/dashboard">

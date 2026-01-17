@@ -3,7 +3,7 @@ import { pgTable, text, varchar, integer, boolean, timestamp, date, pgEnum } fro
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Re-export sessions table from auth module (required for Replit Auth)
+// Sessions table for local auth
 export { sessions } from "./models/auth";
 
 // Enums
@@ -54,7 +54,7 @@ export const leaveStatusEnum = pgEnum("leave_status", [
   "cancelled"
 ]);
 
-// Users table - Extended for Replit Auth integration
+// Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").unique(),
@@ -195,14 +195,19 @@ export const approvalLogsRelations = relations(approvalLogs, ({ one }) => ({
   }),
 }));
 
+// Email domain validation helper
+const isValidEmailDomain = (email: string) => {
+  return email.endsWith("@gtotradingcorp.com") || email.endsWith("@gmail.com");
+};
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
 }).extend({
   email: z.string().email().refine(
-    (email) => email.endsWith("@gtotradingcorp.com"),
-    { message: "Only @gtotradingcorp.com email addresses are allowed" }
+    isValidEmailDomain,
+    { message: "Only @gtotradingcorp.com or @gmail.com email addresses are allowed" }
   ),
   password: z.string().min(8, "Password must be at least 8 characters"),
   fullName: z.string().min(2, "Full name is required"),

@@ -18,8 +18,8 @@ import { DEPARTMENTS, EMPLOYEE_LEVELS } from "@shared/schema";
 const registerSchema = z.object({
   email: z.string()
     .email("Invalid email address")
-    .refine((email) => email.endsWith("@gtotradingcorp.com"), {
-      message: "Only @gtotradingcorp.com email addresses are allowed",
+    .refine((email) => email.endsWith("@gtotradingcorp.com") || email.endsWith("@gmail.com"), {
+      message: "Only @gtotradingcorp.com or @gmail.com email addresses are allowed",
     }),
   password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string(),
@@ -170,7 +170,7 @@ export default function RegisterPage() {
                           />
                         </FormControl>
                         <FormDescription>
-                          Only @gtotradingcorp.com emails are allowed
+                          Use @gtotradingcorp.com or @gmail.com
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -323,7 +323,7 @@ export default function RegisterPage() {
 
               <div className="mt-6 text-center">
                 <Button
-                  variant="link"
+                  variant="ghost"
                   className="gap-1 text-muted-foreground"
                   onClick={() => navigate("/login")}
                   data-testid="link-login"

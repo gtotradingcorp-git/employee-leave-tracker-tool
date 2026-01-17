@@ -260,11 +260,35 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/leave-requests/pending", requireRole("manager", "hr", "admin"), async (req, res) => {
+  app.get("/api/leave-requests/pending", requireAuth, async (req, res) => {
     try {
-      const department = req.user!.role === "manager" ? req.user!.department : undefined;
-      const requests = await storage.getPendingLeaveRequests(department);
-      res.json(requests);
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
+      
+      // HR and Admin can see all pending requests
+      if (userRole === "hr" || userRole === "admin") {
+        const requests = await storage.getPendingLeaveRequests();
+        return res.json(requests);
+      }
+      
+      // For managers and other users, check if they are a designated approver for any department
+      const allApprovers = await storage.getAllDepartmentApprovers();
+      const assignedDepartments = allApprovers
+        .filter(a => a.approverUserId === userId)
+        .map(a => a.department);
+      
+      if (assignedDepartments.length === 0) {
+        return res.json([]); // No departments assigned to this user
+      }
+      
+      // Get pending requests for all assigned departments
+      const allPending: any[] = [];
+      for (const dept of assignedDepartments) {
+        const requests = await storage.getPendingLeaveRequests(dept);
+        allPending.push(...requests);
+      }
+      
+      res.json(allPending);
     } catch (error) {
       console.error("Get pending requests error:", error);
       res.status(500).json({ error: "Failed to get pending requests" });
@@ -289,18 +313,27 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/leave-requests/:id/approve", requireRole("manager", "hr", "admin"), async (req, res) => {
+  app.patch("/api/leave-requests/:id/approve", requireAuth, async (req, res) => {
     try {
       const { remarks } = req.body;
       const requestId = req.params.id;
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
       
       const leaveRequest = await storage.getLeaveRequestWithUser(requestId);
       if (!leaveRequest) {
         return res.status(404).json({ error: "Leave request not found" });
       }
       
-      if (req.user!.role === "manager" && leaveRequest.department !== req.user!.department) {
-        return res.status(403).json({ error: "You can only approve requests from your department" });
+      // HR and Admin can approve any request
+      const isHrOrAdmin = userRole === "hr" || userRole === "admin";
+      
+      // Check if user is the designated approver for this department
+      const departmentApprover = await storage.getDepartmentApprover(leaveRequest.department);
+      const isDesignatedApprover = departmentApprover?.approverUserId === userId;
+      
+      if (!isHrOrAdmin && !isDesignatedApprover) {
+        return res.status(403).json({ error: "You are not authorized to approve requests from this department" });
       }
       
       if (leaveRequest.status !== "pending") {
@@ -363,18 +396,27 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/leave-requests/:id/reject", requireRole("manager", "hr", "admin"), async (req, res) => {
+  app.patch("/api/leave-requests/:id/reject", requireAuth, async (req, res) => {
     try {
       const { remarks } = req.body;
       const requestId = req.params.id;
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
       
       const leaveRequest = await storage.getLeaveRequest(requestId);
       if (!leaveRequest) {
         return res.status(404).json({ error: "Leave request not found" });
       }
       
-      if (req.user!.role === "manager" && leaveRequest.department !== req.user!.department) {
-        return res.status(403).json({ error: "You can only reject requests from your department" });
+      // HR and Admin can reject any request
+      const isHrOrAdmin = userRole === "hr" || userRole === "admin";
+      
+      // Check if user is the designated approver for this department
+      const departmentApprover = await storage.getDepartmentApprover(leaveRequest.department);
+      const isDesignatedApprover = departmentApprover?.approverUserId === userId;
+      
+      if (!isHrOrAdmin && !isDesignatedApprover) {
+        return res.status(403).json({ error: "You are not authorized to reject requests from this department" });
       }
       
       if (leaveRequest.status !== "pending") {
@@ -450,6 +492,39 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get audit logs error:", error);
       res.status(500).json({ error: "Failed to get audit logs" });
+    }
+  });
+
+  // Department Approvers management
+  app.get("/api/admin/department-approvers", requireRole("admin"), async (req, res) => {
+    try {
+      const approvers = await storage.getAllDepartmentApprovers();
+      res.json(approvers);
+    } catch (error) {
+      console.error("Get department approvers error:", error);
+      res.status(500).json({ error: "Failed to get department approvers" });
+    }
+  });
+
+  app.put("/api/admin/department-approvers/:department", requireRole("admin"), async (req, res) => {
+    try {
+      const { approverUserId } = req.body;
+      const { department } = req.params;
+      
+      if (!approverUserId) {
+        return res.status(400).json({ error: "approverUserId is required" });
+      }
+      
+      const user = await storage.getUser(approverUserId);
+      if (!user) {
+        return res.status(404).json({ error: "Approver user not found" });
+      }
+      
+      const approver = await storage.setDepartmentApprover(department, approverUserId);
+      res.json(approver);
+    } catch (error) {
+      console.error("Set department approver error:", error);
+      res.status(500).json({ error: "Failed to set department approver" });
     }
   });
 

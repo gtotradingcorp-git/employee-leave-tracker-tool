@@ -30,6 +30,7 @@ export interface IStorage {
   getUserByEmployeeId(employeeId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserRole(userId: string, role: string): Promise<User | undefined>;
+  completeUserProfile(userId: string, profile: { employeeId: string; department: string; position: string }): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
   
   getUserWithPtoCredits(userId: string): Promise<UserWithPtoCredits | undefined>;
@@ -88,6 +89,24 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db
       .update(users)
       .set({ role: role as any })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async completeUserProfile(
+    userId: string,
+    profile: { employeeId: string; department: string; position: string }
+  ): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        employeeId: profile.employeeId,
+        department: profile.department as any,
+        position: profile.position,
+        isProfileComplete: true,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, userId))
       .returning();
     return user;

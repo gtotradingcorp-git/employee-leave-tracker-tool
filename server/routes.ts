@@ -1,50 +1,74 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import session from "express-session";
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
 import { storage } from "./storage";
-import { insertUserSchema, insertLeaveRequestSchema, loginSchema } from "@shared/schema";
-import bcrypt from "bcrypt";
+import { insertLeaveRequestSchema, type User } from "@shared/schema";
 import { z } from "zod";
 import { Storage } from "@google-cloud/storage";
+import { setupAuth, isAuthenticated, registerAuthRoutes } from "./replit_integrations/auth";
 
-declare module "express-session" {
-  interface SessionData {
-    passport: { user: string };
-  }
+// Profile completion schema
+const completeProfileSchema = z.object({
+  employeeId: z.string().min(1, "Employee ID is required"),
+  department: z.enum([
+    "human_resources",
+    "it_digital_transformation",
+    "accounting",
+    "credit_collection",
+    "sales",
+    "business_unit",
+    "business_support_group",
+    "operations_logistics",
+    "operations_frontline",
+    "operations_warehouse",
+    "top_management"
+  ]),
+  position: z.string().min(1, "Position is required"),
+});
+
+// Helper to get user ID from Replit Auth session
+function getUserId(req: Request): string | undefined {
+  return (req.user as any)?.claims?.sub;
 }
 
-declare global {
-  namespace Express {
-    interface User {
-      id: string;
-      email: string;
-      fullName: string;
-      role: string;
-      department: string;
-    }
-  }
+// Helper to get current user from database
+async function getCurrentUser(req: Request): Promise<User | undefined> {
+  const userId = getUserId(req);
+  if (!userId) return undefined;
+  return await storage.getUser(userId);
 }
 
-const SALT_ROUNDS = 10;
+// Middleware to check if user has completed their profile
+async function requireCompleteProfile(req: Request, res: Response, next: NextFunction) {
+  const user = await getCurrentUser(req);
+  if (!user || !user.isProfileComplete) {
+    return res.status(403).json({ error: "Profile incomplete", code: "PROFILE_INCOMPLETE" });
+  }
+  next();
+}
 
+// Combined middleware for authenticated users with complete profiles
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.status(401).json({ error: "Unauthorized" });
+  isAuthenticated(req, res, async () => {
+    await requireCompleteProfile(req, res, next);
+  });
 }
 
+// Middleware for role-based access (requires complete profile)
 function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    if (!roles.includes(req.user!.role)) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    next();
+    isAuthenticated(req, res, async () => {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
+      if (!user.isProfileComplete) {
+        return res.status(403).json({ error: "Profile incomplete", code: "PROFILE_INCOMPLETE" });
+      }
+      if (!roles.includes(user.role)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      next();
+    });
   };
 }
 
@@ -53,153 +77,70 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret) {
-    throw new Error("SESSION_SECRET environment variable is required");
-  }
-  
-  const isProduction = process.env.NODE_ENV === "production";
-  
-  app.use(
-    session({
-      secret: sessionSecret,
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: isProduction,
-        maxAge: 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        sameSite: isProduction ? "strict" : "lax",
-      },
-    })
-  );
+  // Setup Replit Auth (handles session, passport, login/logout routes)
+  await setupAuth(app);
+  registerAuthRoutes(app);
 
-  app.use(passport.initialize());
-  app.use(passport.session());
-
-  passport.use(
-    new LocalStrategy(
-      { usernameField: "email" },
-      async (email, password, done) => {
-        try {
-          const user = await storage.getUserByEmail(email);
-          if (!user) {
-            return done(null, false, { message: "Invalid email or password" });
-          }
-          
-          const isValid = await bcrypt.compare(password, user.password);
-          if (!isValid) {
-            return done(null, false, { message: "Invalid email or password" });
-          }
-          
-          return done(null, user);
-        } catch (error) {
-          return done(error);
-        }
-      }
-    )
-  );
-
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id);
-  });
-
-  passport.deserializeUser(async (id: string, done) => {
+  // Profile completion endpoint - for new users who logged in via Replit Auth
+  app.post("/api/auth/complete-profile", isAuthenticated, async (req, res) => {
     try {
-      const user = await storage.getUser(id);
-      done(null, user);
-    } catch (error) {
-      done(error);
-    }
-  });
-
-  // Auth routes
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const data = insertUserSchema.parse(req.body);
-      
-      const existingEmail = await storage.getUserByEmail(data.email);
-      if (existingEmail) {
-        return res.status(400).json({ error: "Email already registered" });
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
       }
       
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      if (user.isProfileComplete) {
+        return res.status(400).json({ error: "Profile already complete" });
+      }
+      
+      const data = completeProfileSchema.parse(req.body);
+      
+      // Check if employee ID is already taken
       const existingEmployeeId = await storage.getUserByEmployeeId(data.employeeId);
-      if (existingEmployeeId) {
+      if (existingEmployeeId && existingEmployeeId.id !== userId) {
         return res.status(400).json({ error: "Employee ID already registered" });
       }
       
-      const hashedPassword = await bcrypt.hash(data.password, SALT_ROUNDS);
-      const user = await storage.createUser({
-        ...data,
-        password: hashedPassword,
+      // Update user profile
+      await storage.completeUserProfile(userId, {
+        employeeId: data.employeeId,
+        department: data.department,
+        position: data.position,
       });
       
+      // Create PTO credits for the user
       await storage.createPtoCredits({
-        userId: user.id,
+        userId,
         totalCredits: 5,
         usedCredits: 0,
         lwopDays: 0,
         year: new Date().getFullYear(),
       });
       
-      const userWithCredits = await storage.getUserWithPtoCredits(user.id);
-      
-      req.login(user, (err) => {
-        if (err) {
-          return res.status(500).json({ error: "Login failed after registration" });
-        }
-        const { password: _, ...safeUser } = userWithCredits!;
-        res.status(201).json(safeUser);
-      });
+      const userWithCredits = await storage.getUserWithPtoCredits(userId);
+      const { password: _, ...safeUser } = userWithCredits!;
+      res.json(safeUser);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message });
       }
-      console.error("Registration error:", error);
-      res.status(500).json({ error: "Registration failed" });
+      console.error("Profile completion error:", error);
+      res.status(500).json({ error: "Failed to complete profile" });
     }
   });
 
-  app.post("/api/auth/login", (req, res, next) => {
-    try {
-      loginSchema.parse(req.body);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors[0].message });
-      }
+  // Get current user (works for both complete and incomplete profiles)
+  app.get("/api/auth/me", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
-    
-    passport.authenticate("local", async (err: any, user: any, info: any) => {
-      if (err) {
-        return res.status(500).json({ error: "Authentication error" });
-      }
-      if (!user) {
-        return res.status(401).json({ error: info?.message || "Invalid credentials" });
-      }
-      
-      req.login(user, async (loginErr) => {
-        if (loginErr) {
-          return res.status(500).json({ error: "Login failed" });
-        }
-        
-        const userWithCredits = await storage.getUserWithPtoCredits(user.id);
-        const { password: _, ...safeUser } = userWithCredits!;
-        res.json(safeUser);
-      });
-    })(req, res, next);
-  });
-
-  app.post("/api/auth/logout", requireAuth, (req, res) => {
-    req.logout((err) => {
-      if (err) {
-        return res.status(500).json({ error: "Logout failed" });
-      }
-      res.json({ message: "Logged out successfully" });
-    });
-  });
-
-  app.get("/api/auth/me", requireAuth, async (req, res) => {
-    const userWithCredits = await storage.getUserWithPtoCredits(req.user!.id);
+    const userWithCredits = await storage.getUserWithPtoCredits(userId);
     if (!userWithCredits) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -211,7 +152,7 @@ export async function registerRoutes(
   app.post("/api/leave-requests", requireAuth, async (req, res) => {
     try {
       const data = insertLeaveRequestSchema.parse(req.body);
-      const userId = req.user!.id;
+      const userId = getUserId(req)!;
       const userWithCredits = await storage.getUserWithPtoCredits(userId);
       
       if (!userWithCredits) {
@@ -252,7 +193,8 @@ export async function registerRoutes(
 
   app.get("/api/leave-requests", requireAuth, async (req, res) => {
     try {
-      const requests = await storage.getLeaveRequestsByUser(req.user!.id);
+      const userId = getUserId(req)!;
+      const requests = await storage.getLeaveRequestsByUser(userId);
       res.json(requests);
     } catch (error) {
       console.error("Get leave requests error:", error);
@@ -262,8 +204,9 @@ export async function registerRoutes(
 
   app.get("/api/leave-requests/pending", requireAuth, async (req, res) => {
     try {
-      const userId = req.user!.id;
-      const userRole = req.user!.role;
+      const userId = getUserId(req)!;
+      const user = await getCurrentUser(req);
+      const userRole = user?.role;
       
       // HR and Admin can see all pending requests
       if (userRole === "hr" || userRole === "admin") {
@@ -302,7 +245,8 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Leave request not found" });
       }
       
-      if (request.userId !== req.user!.id && !["manager", "hr", "admin"].includes(req.user!.role)) {
+      const user = await getCurrentUser(req);
+      if (request.userId !== getUserId(req) && !["manager", "hr", "admin"].includes(user?.role || "")) {
         return res.status(403).json({ error: "Forbidden" });
       }
       
@@ -317,8 +261,9 @@ export async function registerRoutes(
     try {
       const { remarks } = req.body;
       const requestId = req.params.id;
-      const userId = req.user!.id;
-      const userRole = req.user!.role;
+      const userId = getUserId(req)!;
+      const user = await getCurrentUser(req);
+      const userRole = user?.role;
       
       const leaveRequest = await storage.getLeaveRequestWithUser(requestId);
       if (!leaveRequest) {
@@ -372,13 +317,13 @@ export async function registerRoutes(
       const updatedRequest = await storage.updateLeaveRequestStatus(
         requestId,
         "approved",
-        req.user!.id,
+        userId,
         remarks
       );
       
       await storage.createApprovalLog({
         leaveRequestId: requestId,
-        actionBy: req.user!.id,
+        actionBy: userId,
         action: leaveRequest.isLwop 
           ? `Approved LWOP request (PTO: ${ptoUsed} days, LWOP: ${lwopUsed} days)` 
           : `Approved leave request (PTO: ${ptoUsed} days)`,
@@ -400,8 +345,9 @@ export async function registerRoutes(
     try {
       const { remarks } = req.body;
       const requestId = req.params.id;
-      const userId = req.user!.id;
-      const userRole = req.user!.role;
+      const userId = getUserId(req)!;
+      const user = await getCurrentUser(req);
+      const userRole = user?.role;
       
       const leaveRequest = await storage.getLeaveRequest(requestId);
       if (!leaveRequest) {
@@ -426,13 +372,13 @@ export async function registerRoutes(
       const updatedRequest = await storage.updateLeaveRequestStatus(
         requestId,
         "rejected",
-        req.user!.id,
+        userId,
         remarks
       );
       
       await storage.createApprovalLog({
         leaveRequestId: requestId,
-        actionBy: req.user!.id,
+        actionBy: userId,
         action: "Rejected leave request",
         previousStatus: "pending",
         newStatus: "rejected",
@@ -531,7 +477,7 @@ export async function registerRoutes(
   // Dashboard data
   app.get("/api/dashboard", requireAuth, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req)!;
       const requests = await storage.getLeaveRequestsByUser(userId);
       
       const pending = requests.filter(r => r.status === "pending").length;
@@ -625,12 +571,13 @@ export async function registerRoutes(
       
       const departmentHealth: Record<string, { employees: number; ptoUsed: number; lwopDays: number }> = {};
       employees.forEach(emp => {
-        if (!departmentHealth[emp.department]) {
-          departmentHealth[emp.department] = { employees: 0, ptoUsed: 0, lwopDays: 0 };
+        const dept = emp.department || "unassigned";
+        if (!departmentHealth[dept]) {
+          departmentHealth[dept] = { employees: 0, ptoUsed: 0, lwopDays: 0 };
         }
-        departmentHealth[emp.department].employees++;
-        departmentHealth[emp.department].ptoUsed += emp.ptoCredits?.usedCredits ?? 0;
-        departmentHealth[emp.department].lwopDays += emp.ptoCredits?.lwopDays ?? 0;
+        departmentHealth[dept].employees++;
+        departmentHealth[dept].ptoUsed += emp.ptoCredits?.usedCredits ?? 0;
+        departmentHealth[dept].lwopDays += emp.ptoCredits?.lwopDays ?? 0;
       });
       
       const operationalImpact = Object.entries(departmentHealth).map(([department, data]) => ({
@@ -696,7 +643,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Leave request not found" });
       }
       
-      if (leaveRequest.userId !== req.user!.id) {
+      if (leaveRequest.userId !== getUserId(req)) {
         return res.status(403).json({ error: "Forbidden" });
       }
       

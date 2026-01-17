@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
-import RegisterPage from "@/pages/register";
+import CompleteProfilePage from "@/pages/complete-profile";
 import DashboardPage from "@/pages/dashboard";
 import FileLeaveRequestPage from "@/pages/file-leave";
 import MyLeavesPage from "@/pages/my-leaves";
@@ -21,7 +21,7 @@ import AdminPage from "@/pages/admin";
 import ExecutiveDashboardPage from "@/pages/executive";
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isProfileComplete } = useAuth();
   const [, navigate] = useLocation();
 
   if (isLoading) {
@@ -37,6 +37,10 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 
   if (!user) {
     return <Redirect to="/login" />;
+  }
+
+  if (!isProfileComplete) {
+    return <Redirect to="/complete-profile" />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -70,11 +74,70 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading, isProfileComplete } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="space-y-4 text-center">
+          <Skeleton className="h-12 w-12 mx-auto rounded-full" />
+          <Skeleton className="h-4 w-32 mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (user && isProfileComplete) {
+    return <Redirect to="/dashboard" />;
+  }
+
+  if (user && !isProfileComplete) {
+    return <Redirect to="/complete-profile" />;
+  }
+
+  return <>{children}</>;
+}
+
+function ProfileCompletionRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading, isProfileComplete } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="space-y-4 text-center">
+          <Skeleton className="h-12 w-12 mx-auto rounded-full" />
+          <Skeleton className="h-4 w-32 mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  if (isProfileComplete) {
+    return <Redirect to="/dashboard" />;
+  }
+
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={LoginPage} />
-      <Route path="/register" component={RegisterPage} />
+      <Route path="/login">
+        <PublicOnlyRoute>
+          <LoginPage />
+        </PublicOnlyRoute>
+      </Route>
+      
+      <Route path="/complete-profile">
+        <ProfileCompletionRoute>
+          <CompleteProfilePage />
+        </ProfileCompletionRoute>
+      </Route>
       
       <Route path="/dashboard">
         <ProtectedRoute>
@@ -101,7 +164,7 @@ function Router() {
       </Route>
 
       <Route path="/approvals">
-        <ProtectedRoute allowedRoles={["manager", "admin"]}>
+        <ProtectedRoute allowedRoles={["manager", "hr", "admin"]}>
           <AuthenticatedLayout>
             <ApprovalsPage />
           </AuthenticatedLayout>
@@ -117,7 +180,7 @@ function Router() {
       </Route>
 
       <Route path="/reports">
-        <ProtectedRoute allowedRoles={["hr", "admin"]}>
+        <ProtectedRoute allowedRoles={["hr", "admin", "top_management"]}>
           <AuthenticatedLayout>
             <ReportsPage />
           </AuthenticatedLayout>

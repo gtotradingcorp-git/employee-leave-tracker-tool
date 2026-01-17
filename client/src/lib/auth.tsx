@@ -1,25 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { UserWithPtoCredits } from "@shared/schema";
-import { apiRequest } from "./queryClient";
 
 interface AuthContextType {
   user: UserWithPtoCredits | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: RegisterData) => Promise<void>;
-  logout: () => Promise<void>;
+  isProfileComplete: boolean;
+  logout: () => void;
   refreshUser: () => Promise<void>;
-}
-
-interface RegisterData {
-  email: string;
-  password: string;
-  fullName: string;
-  employeeId: string;
-  department: string;
-  position: string;
-  employeeLevel: string;
-  supervisorId?: string;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -50,25 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, [refreshUser]);
 
-  const login = async (email: string, password: string) => {
-    const response = await apiRequest("POST", "/api/auth/login", { email, password });
-    const data = await response.json();
-    setUser(data);
+  const logout = () => {
+    window.location.href = "/api/logout";
   };
 
-  const register = async (data: RegisterData) => {
-    const response = await apiRequest("POST", "/api/auth/register", data);
-    const userData = await response.json();
-    setUser(userData);
-  };
-
-  const logout = async () => {
-    await apiRequest("POST", "/api/auth/logout");
-    setUser(null);
-  };
+  const isProfileComplete = !!user?.isProfileComplete;
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, isLoading, isProfileComplete, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

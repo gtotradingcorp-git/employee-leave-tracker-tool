@@ -3,6 +3,9 @@ import { pgTable, text, varchar, integer, boolean, timestamp, date, pgEnum } fro
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Re-export sessions table from auth module (required for Replit Auth)
+export { sessions } from "./models/auth";
+
 // Enums
 export const userRoleEnum = pgEnum("user_role", [
   "employee",
@@ -51,20 +54,25 @@ export const leaveStatusEnum = pgEnum("leave_status", [
   "cancelled"
 ]);
 
-// Users table
+// Users table - Extended for Replit Auth integration
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
-  fullName: text("full_name").notNull(),
-  employeeId: text("employee_id").notNull().unique(),
-  department: departmentEnum("department").notNull(),
-  position: text("position").notNull(),
+  email: text("email").unique(),
+  password: text("password"),
+  fullName: text("full_name"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  profileImageUrl: text("profile_image_url"),
+  employeeId: text("employee_id").unique(),
+  department: departmentEnum("department"),
+  position: text("position"),
   employeeLevel: employeeLevelEnum("employee_level").notNull().default("rank_and_file"),
   role: userRoleEnum("role").notNull().default("employee"),
   supervisorId: varchar("supervisor_id"),
   isActive: boolean("is_active").notNull().default(true),
+  isProfileComplete: boolean("is_profile_complete").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const usersRelations = relations(users, ({ one, many }) => ({

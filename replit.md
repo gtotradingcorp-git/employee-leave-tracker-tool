@@ -1,7 +1,20 @@
-# GTO Trading Corporation Leave Management System
+# GTO Trading Corporation Employee Leave Tracker Tool
 
 ## Overview
-A comprehensive Leave Management System for GTO Trading Corporation serving 200+ employees across 11 departments. The system features role-based access control, PTO credit tracking with LWOP handling, leave filing with 7 leave types, approval workflows, file attachments via object storage, and audit logging.
+A comprehensive Employee Leave Tracker Tool for GTO Trading Corporation serving 200+ employees across 11 departments. The system features role-based access control, PTO credit tracking with LWOP handling, leave filing with 7 leave types, approval workflows with designated department approvers, file attachments via object storage, and audit logging.
+
+## Departments (11 total)
+1. Human Resources (HR)
+2. IT & Digital Transformation
+3. Accounting
+4. Credit & Collection
+5. Sales
+6. Business Unit
+7. Business Support Group
+8. Operations (Logistics)
+9. Operations (Frontline)
+10. Operations (Warehouse)
+11. Top Management
 
 ## Project Architecture
 
@@ -87,6 +100,8 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - 2026-01-17: Sessions stored in PostgreSQL via connect-pg-simple
 - 2026-01-17: Email validation accepts both @gtotradingcorp.com and @gmail.com domains
 - 2026-01-17: Registration captures all employee data (employeeId, department, position, level) upfront
+- 2026-01-17: Added Settings page (/settings) for IT department and admins to configure department approvers
+- 2026-01-17: Fixed LSP errors related to nullable User fields (fullName, email, employeeId, department)
 
 ## Development Notes
 - Run `npm run dev` to start the application

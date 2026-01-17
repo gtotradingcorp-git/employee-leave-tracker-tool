@@ -9,7 +9,7 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - **Frontend**: React + TypeScript + Vite + TailwindCSS + shadcn/ui
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL (Neon) with Drizzle ORM
-- **Authentication**: Replit Auth (OIDC) with session-based auth
+- **Authentication**: Custom email/password auth with bcrypt hashing and PostgreSQL session store
 - **File Storage**: Replit Object Storage
 - **Styling**: TailwindCSS with GTO brand colors (black/gold)
 
@@ -60,11 +60,10 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - Dark mode support
 
 ### API Endpoints
-- `GET /api/login` - Initiate Replit Auth OIDC login
-- `GET /api/callback` - Replit Auth callback
-- `GET /api/logout` - User logout
-- `GET /api/auth/me` - Current user with profile completion status
-- `POST /api/auth/complete-profile` - Complete profile for new users
+- `POST /api/auth/register` - Register new user with employee details
+- `POST /api/auth/login` - Login with email/password
+- `POST /api/logout` - User logout
+- `GET /api/auth/me` - Current authenticated user
 - `GET /api/dashboard` - Dashboard stats
 - `POST /api/leave-requests` - File leave
 - `GET /api/leave-requests` - User's leaves
@@ -84,9 +83,10 @@ A comprehensive Leave Management System for GTO Trading Corporation serving 200+
 - 2026-01-17: Added designated leave approvers per department
 - 2026-01-17: Department is now unchangeable after registration (read-only in admin panel)
 - 2026-01-17: Approval workflow updated to route only to designated approvers or HR/Admin
-- 2026-01-17: Integrated Replit Auth (OIDC) replacing email/password authentication
-- 2026-01-17: Added profile completion flow for new Replit Auth users
-- 2026-01-17: Users table extended with firstName, lastName, profileImageUrl, isProfileComplete fields
+- 2026-01-17: Custom email/password authentication with bcrypt hashing
+- 2026-01-17: Sessions stored in PostgreSQL via connect-pg-simple
+- 2026-01-17: Email validation accepts both @gtotradingcorp.com and @gmail.com domains
+- 2026-01-17: Registration captures all employee data (employeeId, department, position, level) upfront
 
 ## Development Notes
 - Run `npm run dev` to start the application

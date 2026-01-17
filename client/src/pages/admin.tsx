@@ -31,7 +31,7 @@ import {
   Save,
   ChevronRight,
 } from "lucide-react";
-import type { User, ApprovalLog } from "@shared/schema";
+import type { User, ApprovalLog, DepartmentApproverWithUser } from "@shared/schema";
 import { DEPARTMENTS, USER_ROLES, EMPLOYEE_LEVELS } from "@shared/schema";
 
 function getDepartmentLabel(value: string): string {
@@ -56,6 +56,31 @@ export default function AdminPage() {
 
   const { data: auditLogs, isLoading: isLoadingLogs } = useQuery<ApprovalLog[]>({
     queryKey: ["/api/admin/audit-logs"],
+  });
+
+  const { data: departmentApprovers, isLoading: isLoadingApprovers } = useQuery<DepartmentApproverWithUser[]>({
+    queryKey: ["/api/admin/department-approvers"],
+  });
+
+  const updateApproverMutation = useMutation({
+    mutationFn: async ({ department, approverUserId }: { department: string; approverUserId: string }) => {
+      const response = await apiRequest("PUT", `/api/admin/department-approvers/${department}`, { approverUserId });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/department-approvers"] });
+      toast({
+        title: "Approver updated",
+        description: "Department approver has been assigned successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Update failed",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive",
+      });
+    },
   });
 
   const updateRoleMutation = useMutation({
@@ -302,6 +327,83 @@ export default function AdminPage() {
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Department Approvers
+              </CardTitle>
+              <CardDescription>
+                Assign leave request approvers for each department
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingApprovers || isLoadingUsers ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-4 p-3 border rounded-md">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-8 w-48" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {DEPARTMENTS.map((dept) => {
+                    const currentApprover = departmentApprovers?.find(
+                      (a) => a.department === dept.value
+                    );
+                    const eligibleUsers = users?.filter(
+                      (u) => u.role === "manager" || u.role === "hr" || u.role === "admin"
+                    );
+
+                    return (
+                      <div
+                        key={dept.value}
+                        className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-muted/50 rounded-md"
+                        data-testid={`approver-row-${dept.value}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{dept.label}</p>
+                          {currentApprover && (
+                            <p className="text-xs text-muted-foreground">
+                              Current: {currentApprover.approver.fullName}
+                            </p>
+                          )}
+                        </div>
+                        <Select
+                          value={currentApprover?.approverUserId || ""}
+                          onValueChange={(value) => {
+                            if (value) {
+                              updateApproverMutation.mutate({
+                                department: dept.value,
+                                approverUserId: value,
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            className="w-full sm:w-64"
+                            data-testid={`select-approver-${dept.value}`}
+                          >
+                            <SelectValue placeholder="Select approver" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {eligibleUsers?.map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.fullName} ({getRoleLabel(u.role)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

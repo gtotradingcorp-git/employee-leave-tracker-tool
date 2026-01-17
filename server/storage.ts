@@ -6,6 +6,7 @@ import {
   ptoCredits,
   leaveAttachments,
   approvalLogs,
+  departmentApprovers,
   type User,
   type InsertUser,
   type LeaveRequest,
@@ -16,8 +17,11 @@ import {
   type InsertLeaveAttachment,
   type ApprovalLog,
   type InsertApprovalLog,
+  type DepartmentApprover,
+  type InsertDepartmentApprover,
   type UserWithPtoCredits,
   type LeaveRequestWithUser,
+  type DepartmentApproverWithUser,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -53,6 +57,10 @@ export interface IStorage {
   
   createApprovalLog(log: InsertApprovalLog): Promise<ApprovalLog>;
   getApprovalLogs(leaveRequestId?: string): Promise<ApprovalLog[]>;
+  
+  getDepartmentApprover(department: string): Promise<DepartmentApproverWithUser | undefined>;
+  getAllDepartmentApprovers(): Promise<DepartmentApproverWithUser[]>;
+  setDepartmentApprover(department: string, approverUserId: string): Promise<DepartmentApprover>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -276,6 +284,56 @@ export class DatabaseStorage implements IStorage {
       .from(approvalLogs)
       .orderBy(desc(approvalLogs.createdAt))
       .limit(100);
+  }
+
+  async getDepartmentApprover(department: string): Promise<DepartmentApproverWithUser | undefined> {
+    const [approver] = await db
+      .select()
+      .from(departmentApprovers)
+      .where(eq(departmentApprovers.department, department as any));
+    
+    if (!approver) return undefined;
+    
+    const [user] = await db.select().from(users).where(eq(users.id, approver.approverUserId));
+    if (!user) return undefined;
+    
+    return { ...approver, approver: user };
+  }
+
+  async getAllDepartmentApprovers(): Promise<DepartmentApproverWithUser[]> {
+    const allApprovers = await db.select().from(departmentApprovers);
+    
+    const result: DepartmentApproverWithUser[] = [];
+    for (const approver of allApprovers) {
+      const [user] = await db.select().from(users).where(eq(users.id, approver.approverUserId));
+      if (user) {
+        result.push({ ...approver, approver: user });
+      }
+    }
+    
+    return result;
+  }
+
+  async setDepartmentApprover(department: string, approverUserId: string): Promise<DepartmentApprover> {
+    const existing = await db
+      .select()
+      .from(departmentApprovers)
+      .where(eq(departmentApprovers.department, department as any));
+    
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(departmentApprovers)
+        .set({ approverUserId, updatedAt: new Date() })
+        .where(eq(departmentApprovers.department, department as any))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(departmentApprovers)
+        .values({ department: department as any, approverUserId })
+        .returning();
+      return created;
+    }
   }
 }
 

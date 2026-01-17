@@ -147,6 +147,21 @@ export const leaveAttachmentsRelations = relations(leaveAttachments, ({ one }) =
   }),
 }));
 
+// Department Approvers table
+export const departmentApprovers = pgTable("department_approvers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  department: departmentEnum("department").notNull().unique(),
+  approverUserId: varchar("approver_user_id").notNull().references(() => users.id),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const departmentApproversRelations = relations(departmentApprovers, ({ one }) => ({
+  approver: one(users, {
+    fields: [departmentApprovers.approverUserId],
+    references: [users.id],
+  }),
+}));
+
 // Approval Logs table (audit trail)
 export const approvalLogs = pgTable("approval_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -216,6 +231,11 @@ export const insertApprovalLogSchema = createInsertSchema(approvalLogs).omit({
   createdAt: true,
 });
 
+export const insertDepartmentApproverSchema = createInsertSchema(departmentApprovers).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Login schema
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -233,6 +253,8 @@ export type InsertLeaveAttachment = z.infer<typeof insertLeaveAttachmentSchema>;
 export type LeaveAttachment = typeof leaveAttachments.$inferSelect;
 export type InsertApprovalLog = z.infer<typeof insertApprovalLogSchema>;
 export type ApprovalLog = typeof approvalLogs.$inferSelect;
+export type InsertDepartmentApprover = z.infer<typeof insertDepartmentApproverSchema>;
+export type DepartmentApprover = typeof departmentApprovers.$inferSelect;
 export type LoginInput = z.infer<typeof loginSchema>;
 
 // Extended types for frontend
@@ -244,6 +266,10 @@ export type LeaveRequestWithUser = LeaveRequest & {
 
 export type UserWithPtoCredits = User & {
   ptoCredits?: PtoCredits;
+};
+
+export type DepartmentApproverWithUser = DepartmentApprover & {
+  approver: User;
 };
 
 // Constants

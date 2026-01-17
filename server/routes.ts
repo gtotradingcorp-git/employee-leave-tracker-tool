@@ -109,6 +109,12 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Validate session secret in production
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (process.env.NODE_ENV === "production" && !sessionSecret) {
+    throw new Error("SESSION_SECRET environment variable is required in production");
+  }
+  
   // Setup session with PostgreSQL store
   const PgSession = connectPgSimple(session);
   
@@ -119,7 +125,7 @@ export async function registerRoutes(
         tableName: "sessions",
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "gto-leave-management-secret",
+      secret: sessionSecret || "gto-leave-management-dev-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {

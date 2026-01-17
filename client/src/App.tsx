@@ -19,8 +19,17 @@ import EmployeesPage from "@/pages/employees";
 import ReportsPage from "@/pages/reports";
 import AdminPage from "@/pages/admin";
 import ExecutiveDashboardPage from "@/pages/executive";
+import SettingsPage from "@/pages/settings";
 
-function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
+function ProtectedRoute({ 
+  children, 
+  allowedRoles, 
+  allowedDepartments 
+}: { 
+  children: React.ReactNode; 
+  allowedRoles?: string[]; 
+  allowedDepartments?: string[];
+}) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -38,7 +47,16 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
     return <Redirect to="/login" />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  const roleAllowed = !allowedRoles || allowedRoles.includes(user.role);
+  const deptAllowed = !allowedDepartments || (user.department && allowedDepartments.includes(user.department));
+  
+  if (allowedRoles && allowedDepartments) {
+    if (!roleAllowed && !deptAllowed) {
+      return <Redirect to="/dashboard" />;
+    }
+  } else if (allowedRoles && !roleAllowed) {
+    return <Redirect to="/dashboard" />;
+  } else if (allowedDepartments && !deptAllowed) {
     return <Redirect to="/dashboard" />;
   }
 
@@ -165,6 +183,14 @@ function Router() {
         <ProtectedRoute allowedRoles={["top_management", "admin"]}>
           <AuthenticatedLayout>
             <ExecutiveDashboardPage />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/settings">
+        <ProtectedRoute allowedRoles={["admin"]} allowedDepartments={["it_digital_transformation"]}>
+          <AuthenticatedLayout>
+            <SettingsPage />
           </AuthenticatedLayout>
         </ProtectedRoute>
       </Route>

@@ -110,9 +110,9 @@ export default function AdminPage() {
   const filteredUsers = users?.filter((u) => {
     return (
       searchTerm === "" ||
-      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
+      (u.fullName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (u.employeeId || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
 
@@ -207,12 +207,12 @@ export default function AdminPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredUsers.map((u) => {
-                        const initials = u.fullName
+                        const initials = (u.fullName || "")
                           .split(" ")
                           .map((n) => n[0])
                           .join("")
                           .toUpperCase()
-                          .slice(0, 2);
+                          .slice(0, 2) || "?";
 
                         return (
                           <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
@@ -224,13 +224,13 @@ export default function AdminPage() {
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
-                                  <p className="font-medium text-sm">{u.fullName}</p>
-                                  <p className="text-xs text-muted-foreground">{u.email}</p>
+                                  <p className="font-medium text-sm">{u.fullName || "Unknown"}</p>
+                                  <p className="text-xs text-muted-foreground">{u.email || ""}</p>
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="font-mono text-sm">{u.employeeId}</TableCell>
-                            <TableCell className="text-sm">{getDepartmentLabel(u.department)}</TableCell>
+                            <TableCell className="font-mono text-sm">{u.employeeId || ""}</TableCell>
+                            <TableCell className="text-sm">{getDepartmentLabel(u.department || "")}</TableCell>
                             <TableCell>
                               <Badge variant="secondary">{getRoleLabel(u.role)}</Badge>
                             </TableCell>
@@ -447,7 +447,7 @@ export default function AdminPage() {
               <DialogHeader>
                 <DialogTitle>Edit User Role</DialogTitle>
                 <DialogDescription>
-                  Change the role for {selectedUser.fullName}
+                  Change the role for {selectedUser.fullName || "Unknown"}
                 </DialogDescription>
               </DialogHeader>
 
@@ -455,17 +455,17 @@ export default function AdminPage() {
                 <div className="flex items-center gap-3 p-3 bg-muted rounded-md">
                   <Avatar className="h-10 w-10">
                     <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                      {selectedUser.fullName
+                      {(selectedUser.fullName || "")
                         .split(" ")
                         .map((n) => n[0])
                         .join("")
                         .toUpperCase()
-                        .slice(0, 2)}
+                        .slice(0, 2) || "?"}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{selectedUser.fullName}</p>
-                    <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                    <p className="font-medium">{selectedUser.fullName || "Unknown"}</p>
+                    <p className="text-sm text-muted-foreground">{selectedUser.email || ""}</p>
                   </div>
                 </div>
 

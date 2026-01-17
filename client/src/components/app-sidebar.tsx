@@ -86,16 +86,24 @@ export function AppSidebar() {
       });
     }
 
+    if (user.department === "it_digital_transformation" || user.role === "admin") {
+      baseItems.push({
+        title: "Settings",
+        url: "/settings",
+        icon: Settings,
+      });
+    }
+
     return baseItems;
   };
 
   const menuItems = getMenuItems();
-  const initials = user.fullName
+  const initials = (user.fullName || "")
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || "?";
 
   const handleLogout = async () => {
     await logout();

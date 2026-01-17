@@ -545,7 +545,7 @@ export async function registerRoutes(
     }
   });
 
-  // Department Approvers management
+  // Department Approvers management (admin)
   app.get("/api/admin/department-approvers", requireRole("admin"), async (req, res) => {
     try {
       const approvers = await storage.getAllDepartmentApprovers();
@@ -557,6 +557,64 @@ export async function registerRoutes(
   });
 
   app.put("/api/admin/department-approvers/:department", requireRole("admin"), async (req, res) => {
+    try {
+      const { approverUserId } = req.body;
+      const { department } = req.params;
+      
+      if (!approverUserId) {
+        return res.status(400).json({ error: "approverUserId is required" });
+      }
+      
+      const user = await storage.getUser(approverUserId);
+      if (!user) {
+        return res.status(404).json({ error: "Approver user not found" });
+      }
+      
+      const approver = await storage.setDepartmentApprover(department, approverUserId);
+      res.json(approver);
+    } catch (error) {
+      console.error("Set department approver error:", error);
+      res.status(500).json({ error: "Failed to set department approver" });
+    }
+  });
+
+  // Settings routes (IT Department only)
+  const requireITDepartment = async (req: Request, res: Response, next: NextFunction) => {
+    const user = await getCurrentUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (user.department !== "it_digital_transformation" && user.role !== "admin") {
+      return res.status(403).json({ error: "Access restricted to IT & Digital Transformation department" });
+    }
+    next();
+  };
+
+  app.get("/api/settings/users", requireAuth, requireITDepartment, async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const safeUsers = allUsers.map(u => {
+        const { password: _, ...safe } = u;
+        return safe;
+      });
+      res.json(safeUsers);
+    } catch (error) {
+      console.error("Get users for settings error:", error);
+      res.status(500).json({ error: "Failed to get users" });
+    }
+  });
+
+  app.get("/api/settings/department-approvers", requireAuth, requireITDepartment, async (req, res) => {
+    try {
+      const approvers = await storage.getAllDepartmentApprovers();
+      res.json(approvers);
+    } catch (error) {
+      console.error("Get department approvers error:", error);
+      res.status(500).json({ error: "Failed to get department approvers" });
+    }
+  });
+
+  app.put("/api/settings/department-approvers/:department", requireAuth, requireITDepartment, async (req, res) => {
     try {
       const { approverUserId } = req.body;
       const { department } = req.params;

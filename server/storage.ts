@@ -42,7 +42,7 @@ export interface IStorage {
   
   getLeaveRequest(id: string): Promise<LeaveRequest | undefined>;
   getLeaveRequestWithUser(id: string): Promise<LeaveRequestWithUser | undefined>;
-  createLeaveRequest(request: InsertLeaveRequest & { isLwop?: boolean }): Promise<LeaveRequest>;
+  createLeaveRequest(request: InsertLeaveRequest & { userId: string; totalDays: number; isLwop?: boolean }): Promise<LeaveRequest>;
   updateLeaveRequestStatus(
     id: string,
     status: string,
@@ -176,7 +176,7 @@ export class DatabaseStorage implements IStorage {
     return { ...request, user, approver, attachments: attachmentsList };
   }
 
-  async createLeaveRequest(insertRequest: InsertLeaveRequest & { isLwop?: boolean }): Promise<LeaveRequest> {
+  async createLeaveRequest(insertRequest: InsertLeaveRequest & { userId: string; totalDays: number; isLwop?: boolean }): Promise<LeaveRequest> {
     const [request] = await db.insert(leaveRequests).values({
       ...insertRequest,
       isLwop: insertRequest.isLwop ?? false,

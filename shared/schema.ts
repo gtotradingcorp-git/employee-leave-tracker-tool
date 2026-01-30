@@ -217,12 +217,14 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({
   id: true,
+  userId: true,
   status: true,
   isLwop: true,
   approverId: true,
   approverRemarks: true,
   approvedAt: true,
   filedAt: true,
+  totalDays: true,
 }).extend({
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
   startDate: z.string(),

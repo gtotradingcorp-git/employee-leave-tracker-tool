@@ -85,9 +85,9 @@ export default function SettingsPage() {
 
   const getEligibleUsersForDepartment = (deptValue: string) => {
     const currentApproverIds = getApproversForDepartment(deptValue).map(a => a.approverUserId);
+    // Allow any user to be an approver - company may designate any employee as a leave approver
     return users?.filter(
-      (u) => (u.role === "manager" || u.role === "hr" || u.role === "admin" || u.role === "top_management") &&
-             !currentApproverIds.includes(u.id)
+      (u) => !currentApproverIds.includes(u.id)
     ) || [];
   };
 

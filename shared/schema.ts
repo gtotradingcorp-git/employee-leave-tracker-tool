@@ -228,7 +228,7 @@ export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
   startDate: z.string(),
   endDate: z.string(),
-  approverId: z.string().min(1, "Please select an approver"),
+  approverId: z.string().optional(), // Optional - if no approvers configured, HR/Admin can approve
 });
 
 export const insertPtoCreditsSchema = createInsertSchema(ptoCredits).omit({

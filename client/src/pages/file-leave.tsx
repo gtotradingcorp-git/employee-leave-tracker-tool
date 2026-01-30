@@ -34,7 +34,7 @@ import { useUpload } from "@/hooks/use-upload";
 const leaveFormSchema = z.object({
   leaveType: z.string().min(1, "Please select a leave type"),
   department: z.string().min(1, "Please select your department"),
-  approverId: z.string().min(1, "Please select an approver"),
+  approverId: z.string().optional(),
   startDate: z.date({ required_error: "Start date is required" }),
   endDate: z.date({ required_error: "End date is required" }),
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
@@ -159,6 +159,15 @@ export default function FileLeaveRequestPage() {
   });
 
   const handleSubmit = (data: LeaveFormData) => {
+    // Require approver selection if approvers are available for the department
+    if (departmentApprovers && departmentApprovers.length > 0 && !data.approverId) {
+      form.setError("approverId", {
+        type: "manual",
+        message: "Please select an approver",
+      });
+      return;
+    }
+    
     if (willBeLwop && !pendingSubmit) {
       setPendingSubmit(data);
       setShowLwopDialog(true);
@@ -299,48 +308,54 @@ export default function FileLeaveRequestPage() {
               <FormField
                 control={form.control}
                 name="approverId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <UserCheck className="h-4 w-4" />
-                      Leave Approver *
-                    </FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      value={field.value}
-                      disabled={!selectedDepartment || isLoadingApprovers}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-approver">
-                          <SelectValue placeholder={
-                            !selectedDepartment 
-                              ? "Select department first" 
-                              : isLoadingApprovers 
-                                ? "Loading approvers..." 
-                                : "Select your approver"
-                          } />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {departmentApprovers && departmentApprovers.length > 0 ? (
-                          departmentApprovers.map((approver) => (
-                            <SelectItem key={approver.id} value={approver.approverUserId}>
-                              {approver.approver.fullName} - {approver.approver.position || "Approver"}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <div className="p-2 text-sm text-muted-foreground text-center">
-                            No approvers assigned for this department
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Select the designated approver for your department
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const hasApprovers = departmentApprovers && departmentApprovers.length > 0;
+                  return (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4" />
+                        Leave Approver {hasApprovers ? "*" : "(Optional)"}
+                      </FormLabel>
+                      {hasApprovers ? (
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value}
+                          disabled={!selectedDepartment || isLoadingApprovers}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-approver">
+                              <SelectValue placeholder={
+                                !selectedDepartment 
+                                  ? "Select department first" 
+                                  : isLoadingApprovers 
+                                    ? "Loading approvers..." 
+                                    : "Select your approver"
+                              } />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {departmentApprovers.map((approver) => (
+                              <SelectItem key={approver.id} value={approver.approverUserId}>
+                                {approver.approver.fullName} - {approver.approver.position || "Approver"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="p-3 border rounded-md bg-muted/50 text-sm text-muted-foreground" data-testid="text-no-approvers">
+                          No designated approvers for this department. Your request will be routed to HR/Admin for approval.
+                        </div>
+                      )}
+                      <FormDescription>
+                        {hasApprovers 
+                          ? "Select the designated approver for your department"
+                          : "Leave requests without a designated approver will be reviewed by HR or Admin"
+                        }
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

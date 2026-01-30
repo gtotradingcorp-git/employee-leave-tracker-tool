@@ -263,10 +263,13 @@ export async function registerRoutes(
         return res.status(404).json({ error: "User not found" });
       }
       
+      // Normalize empty approverId to null
+      const approverId = data.approverId && data.approverId.trim() !== "" ? data.approverId : null;
+      
       // Validate that the selected approver is a designated approver for the department
-      if (data.approverId) {
+      if (approverId) {
         const departmentApprovers = await storage.getDepartmentApprovers(data.department);
-        const isValidApprover = departmentApprovers.some(a => a.approverUserId === data.approverId);
+        const isValidApprover = departmentApprovers.some(a => a.approverUserId === approverId);
         
         if (!isValidApprover) {
           return res.status(400).json({ error: "Invalid approver for this department" });
@@ -282,6 +285,7 @@ export async function registerRoutes(
       
       const leaveRequest = await storage.createLeaveRequest({
         ...data,
+        approverId, // Use normalized approverId (null instead of empty string)
         userId,
         totalDays,
         isLwop,

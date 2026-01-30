@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,10 +14,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { format, differenceInBusinessDays, addDays, isWeekend } from "date-fns";
+import { format, addDays, isWeekend } from "date-fns";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarIcon, Send, AlertTriangle, FileUp } from "lucide-react";
-import { LEAVE_TYPES, DEPARTMENTS } from "@shared/schema";
+import { ArrowLeft, CalendarIcon, Send, AlertTriangle, FileUp, UserCheck } from "lucide-react";
+import { LEAVE_TYPES, DEPARTMENTS, type DepartmentApproverWithUser } from "@shared/schema";
 import { PtoBalanceBadge } from "@/components/status-badge";
 import {
   AlertDialog,
@@ -34,6 +34,7 @@ import { useUpload } from "@/hooks/use-upload";
 const leaveFormSchema = z.object({
   leaveType: z.string().min(1, "Please select a leave type"),
   department: z.string().min(1, "Please select your department"),
+  approverId: z.string().min(1, "Please select an approver"),
   startDate: z.date({ required_error: "Start date is required" }),
   endDate: z.date({ required_error: "End date is required" }),
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
@@ -87,12 +88,31 @@ export default function FileLeaveRequestPage() {
     defaultValues: {
       leaveType: "",
       department: user?.department || "",
+      approverId: "",
       reason: "",
     },
   });
 
+  const selectedDepartment = form.watch("department");
   const startDate = form.watch("startDate");
   const endDate = form.watch("endDate");
+
+  const { data: departmentApprovers, isLoading: isLoadingApprovers } = useQuery<DepartmentApproverWithUser[]>({
+    queryKey: ["/api/department-approvers", selectedDepartment],
+    queryFn: async () => {
+      if (!selectedDepartment) return [];
+      const response = await fetch(`/api/department-approvers/${selectedDepartment}`, {
+        credentials: "include",
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!selectedDepartment,
+  });
+
+  useEffect(() => {
+    form.setValue("approverId", "");
+  }, [selectedDepartment, form]);
 
   const totalDays = useMemo(() => {
     if (startDate && endDate) {
@@ -111,6 +131,7 @@ export default function FileLeaveRequestPage() {
       const response = await apiRequest("POST", "/api/leave-requests", {
         leaveType: data.leaveType,
         department: data.department,
+        approverId: data.approverId,
         startDate: format(data.startDate, "yyyy-MM-dd"),
         endDate: format(data.endDate, "yyyy-MM-dd"),
         totalDays,
@@ -274,6 +295,53 @@ export default function FileLeaveRequestPage() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="approverId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <UserCheck className="h-4 w-4" />
+                      Leave Approver *
+                    </FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value}
+                      disabled={!selectedDepartment || isLoadingApprovers}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-approver">
+                          <SelectValue placeholder={
+                            !selectedDepartment 
+                              ? "Select department first" 
+                              : isLoadingApprovers 
+                                ? "Loading approvers..." 
+                                : "Select your approver"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {departmentApprovers && departmentApprovers.length > 0 ? (
+                          departmentApprovers.map((approver) => (
+                            <SelectItem key={approver.id} value={approver.approverUserId}>
+                              {approver.approver.fullName} - {approver.approver.position || "Approver"}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            No approvers assigned for this department
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Select the designated approver for your department
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField

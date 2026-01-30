@@ -60,8 +60,11 @@ export interface IStorage {
   getApprovalLogs(leaveRequestId?: string): Promise<ApprovalLog[]>;
   
   getDepartmentApprover(department: string): Promise<DepartmentApproverWithUser | undefined>;
+  getDepartmentApprovers(department: string): Promise<DepartmentApproverWithUser[]>;
   getAllDepartmentApprovers(): Promise<DepartmentApproverWithUser[]>;
   setDepartmentApprover(department: string, approverUserId: string): Promise<DepartmentApprover>;
+  addDepartmentApprover(department: string, approverUserId: string): Promise<DepartmentApprover>;
+  removeDepartmentApprover(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -353,6 +356,50 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  async getDepartmentApprovers(department: string): Promise<DepartmentApproverWithUser[]> {
+    const approvers = await db
+      .select()
+      .from(departmentApprovers)
+      .where(eq(departmentApprovers.department, department as any));
+    
+    const result: DepartmentApproverWithUser[] = [];
+    for (const approver of approvers) {
+      const [user] = await db.select().from(users).where(eq(users.id, approver.approverUserId));
+      if (user) {
+        result.push({ ...approver, approver: user });
+      }
+    }
+    
+    return result;
+  }
+
+  async addDepartmentApprover(department: string, approverUserId: string): Promise<DepartmentApprover> {
+    // Check if this exact combination already exists
+    const existing = await db
+      .select()
+      .from(departmentApprovers)
+      .where(
+        and(
+          eq(departmentApprovers.department, department as any),
+          eq(departmentApprovers.approverUserId, approverUserId)
+        )
+      );
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const [created] = await db
+      .insert(departmentApprovers)
+      .values({ department: department as any, approverUserId })
+      .returning();
+    return created;
+  }
+
+  async removeDepartmentApprover(id: string): Promise<void> {
+    await db.delete(departmentApprovers).where(eq(departmentApprovers.id, id));
   }
 }
 

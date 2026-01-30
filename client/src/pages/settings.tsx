@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Shield, Info } from "lucide-react";
+import { Settings, Shield, Info, Plus, X } from "lucide-react";
 import type { User, DepartmentApproverWithUser } from "@shared/schema";
 import { DEPARTMENTS, USER_ROLES } from "@shared/schema";
 
@@ -21,6 +24,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [selectedApprovers, setSelectedApprovers] = useState<Record<string, string>>({});
 
   const { data: users, isLoading: isLoadingUsers } = useQuery<User[]>({
     queryKey: ["/api/settings/users"],
@@ -30,21 +34,43 @@ export default function SettingsPage() {
     queryKey: ["/api/settings/department-approvers"],
   });
 
-  const updateApproverMutation = useMutation({
+  const addApproverMutation = useMutation({
     mutationFn: async ({ department, approverUserId }: { department: string; approverUserId: string }) => {
-      const response = await apiRequest("PUT", `/api/settings/department-approvers/${department}`, { approverUserId });
+      const response = await apiRequest("POST", `/api/settings/department-approvers/${department}`, { approverUserId });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/department-approvers"] });
+      setSelectedApprovers(prev => ({ ...prev, [variables.department]: "" }));
       toast({
-        title: "Approver updated",
+        title: "Approver added",
         description: "Department approver has been assigned successfully.",
       });
     },
     onError: (error) => {
       toast({
-        title: "Update failed",
+        title: "Failed to add approver",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const removeApproverMutation = useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const response = await apiRequest("DELETE", `/api/settings/department-approvers/${id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/department-approvers"] });
+      toast({
+        title: "Approver removed",
+        description: "Department approver has been removed successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to remove approver",
         description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive",
       });
@@ -52,6 +78,18 @@ export default function SettingsPage() {
   });
 
   if (!user) return null;
+
+  const getApproversForDepartment = (deptValue: string) => {
+    return departmentApprovers?.filter(a => a.department === deptValue) || [];
+  };
+
+  const getEligibleUsersForDepartment = (deptValue: string) => {
+    const currentApproverIds = getApproversForDepartment(deptValue).map(a => a.approverUserId);
+    return users?.filter(
+      (u) => (u.role === "manager" || u.role === "hr" || u.role === "admin" || u.role === "top_management") &&
+             !currentApproverIds.includes(u.id)
+    ) || [];
+  };
 
   return (
     <div className="space-y-6">
@@ -71,14 +109,14 @@ export default function SettingsPage() {
             Department Leave Approvers
           </CardTitle>
           <CardDescription>
-            Assign the designated leave approver for each department. Leave requests will be routed to the assigned approver for approval.
+            Assign designated leave approvers for each department. Employees will select their approver when filing leaves.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-md mb-4">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5" />
             <p className="text-sm text-muted-foreground">
-              Only users with Manager, HR, or Admin roles can be assigned as department approvers. HR and Admin users can also approve requests from any department.
+              Multiple approvers can be assigned per department. Employees will choose from these approvers when filing leave requests.
             </p>
           </div>
 
@@ -92,58 +130,86 @@ export default function SettingsPage() {
               ))}
             </div>
           ) : (
-            <div className="space-y-3">
-              {DEPARTMENTS.map((dept) => {
-                const currentApprover = departmentApprovers?.find(
-                  (a) => a.department === dept.value
-                );
-                const eligibleUsers = users?.filter(
-                  (u) => u.role === "manager" || u.role === "hr" || u.role === "admin"
-                );
+            <div className="space-y-4">
+              {DEPARTMENTS.filter(d => d.value !== "top_management").map((dept) => {
+                const currentApprovers = getApproversForDepartment(dept.value);
+                const eligibleUsers = getEligibleUsersForDepartment(dept.value);
 
                 return (
                   <div
                     key={dept.value}
-                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 border rounded-md"
+                    className="p-4 border rounded-md space-y-3"
                     data-testid={`approver-row-${dept.value}`}
                   >
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{dept.label}</p>
-                      {currentApprover ? (
-                        <p className="text-xs text-muted-foreground">
-                          Current: {currentApprover.approver.fullName} ({getRoleLabel(currentApprover.approver.role)})
-                        </p>
-                      ) : (
-                        <p className="text-xs text-yellow-600 dark:text-yellow-500">
-                          No approver assigned
-                        </p>
-                      )}
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{dept.label}</p>
+                      <Badge variant={currentApprovers.length > 0 ? "default" : "secondary"}>
+                        {currentApprovers.length} approver{currentApprovers.length !== 1 ? "s" : ""}
+                      </Badge>
                     </div>
-                    <Select
-                      value={currentApprover?.approverUserId || ""}
-                      onValueChange={(value) => {
-                        if (value) {
-                          updateApproverMutation.mutate({
-                            department: dept.value,
-                            approverUserId: value,
-                          });
-                        }
-                      }}
-                    >
-                      <SelectTrigger
-                        className="w-full sm:w-72"
-                        data-testid={`select-approver-${dept.value}`}
-                      >
-                        <SelectValue placeholder="Select approver..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {eligibleUsers?.map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.fullName || "Unknown"} - {getDepartmentLabel(u.department || "")} ({getRoleLabel(u.role)})
-                          </SelectItem>
+
+                    {currentApprovers.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {currentApprovers.map((approver) => (
+                          <Badge
+                            key={approver.id}
+                            variant="outline"
+                            className="flex items-center gap-1 py-1 px-2"
+                          >
+                            <span>{approver.approver.fullName}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4 p-0 hover:bg-destructive/20"
+                              onClick={() => removeApproverMutation.mutate({ id: approver.id })}
+                              disabled={removeApproverMutation.isPending}
+                              data-testid={`button-remove-approver-${approver.id}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </Badge>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Select
+                        value={selectedApprovers[dept.value] || ""}
+                        onValueChange={(value) => setSelectedApprovers(prev => ({ ...prev, [dept.value]: value }))}
+                      >
+                        <SelectTrigger
+                          className="flex-1"
+                          data-testid={`select-approver-${dept.value}`}
+                        >
+                          <SelectValue placeholder="Select an approver to add..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eligibleUsers.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.fullName || "Unknown"} - {getDepartmentLabel(u.department || "")} ({getRoleLabel(u.role)})
+                            </SelectItem>
+                          ))}
+                          {eligibleUsers.length === 0 && (
+                            <div className="p-2 text-sm text-muted-foreground text-center">
+                              No eligible users available
+                            </div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="icon"
+                        onClick={() => {
+                          const approverUserId = selectedApprovers[dept.value];
+                          if (approverUserId) {
+                            addApproverMutation.mutate({ department: dept.value, approverUserId });
+                          }
+                        }}
+                        disabled={!selectedApprovers[dept.value] || addApproverMutation.isPending}
+                        data-testid={`button-add-approver-${dept.value}`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 );
               })}

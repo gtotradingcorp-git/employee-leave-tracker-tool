@@ -155,10 +155,10 @@ export const leaveAttachmentsRelations = relations(leaveAttachments, ({ one }) =
   }),
 }));
 
-// Department Approvers table
+// Department Approvers table (supports multiple approvers per department)
 export const departmentApprovers = pgTable("department_approvers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  department: departmentEnum("department").notNull().unique(),
+  department: departmentEnum("department").notNull(),
   approverUserId: varchar("approver_user_id").notNull().references(() => users.id),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -220,7 +220,6 @@ export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({
   userId: true,
   status: true,
   isLwop: true,
-  approverId: true,
   approverRemarks: true,
   approvedAt: true,
   filedAt: true,
@@ -229,6 +228,7 @@ export const insertLeaveRequestSchema = createInsertSchema(leaveRequests).omit({
   reason: z.string().min(10, "Please provide a detailed reason (at least 10 characters)"),
   startDate: z.string(),
   endDate: z.string(),
+  approverId: z.string().min(1, "Please select an approver"),
 });
 
 export const insertPtoCreditsSchema = createInsertSchema(ptoCredits).omit({

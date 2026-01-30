@@ -263,6 +263,16 @@ export async function registerRoutes(
         return res.status(404).json({ error: "User not found" });
       }
       
+      // Validate that the selected approver is a designated approver for the department
+      if (data.approverId) {
+        const departmentApprovers = await storage.getDepartmentApprovers(data.department);
+        const isValidApprover = departmentApprovers.some(a => a.approverUserId === data.approverId);
+        
+        if (!isValidApprover) {
+          return res.status(400).json({ error: "Invalid approver for this department" });
+        }
+      }
+      
       const startDate = new Date(data.startDate);
       const endDate = new Date(data.endDate);
       const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -377,11 +387,14 @@ export async function registerRoutes(
       // HR and Admin can approve any request
       const isHrOrAdmin = userRole === "hr" || userRole === "admin";
       
-      // Check if user is the designated approver for this department
-      const departmentApprover = await storage.getDepartmentApprover(leaveRequest.department);
-      const isDesignatedApprover = departmentApprover?.approverUserId === userId;
+      // Check if user is the designated approver for this specific leave request
+      const isDesignatedApprover = leaveRequest.approverId === userId;
       
-      if (!isHrOrAdmin && !isDesignatedApprover) {
+      // Also check if user is any approver for this department (for backwards compatibility)
+      const departmentApprovers = await storage.getDepartmentApprovers(leaveRequest.department);
+      const isDepartmentApprover = departmentApprovers.some(a => a.approverUserId === userId);
+      
+      if (!isHrOrAdmin && !isDesignatedApprover && !isDepartmentApprover) {
         return res.status(403).json({ error: "You are not authorized to approve requests from this department" });
       }
       
@@ -461,11 +474,14 @@ export async function registerRoutes(
       // HR and Admin can reject any request
       const isHrOrAdmin = userRole === "hr" || userRole === "admin";
       
-      // Check if user is the designated approver for this department
-      const departmentApprover = await storage.getDepartmentApprover(leaveRequest.department);
-      const isDesignatedApprover = departmentApprover?.approverUserId === userId;
+      // Check if user is the designated approver for this specific leave request
+      const isDesignatedApprover = leaveRequest.approverId === userId;
       
-      if (!isHrOrAdmin && !isDesignatedApprover) {
+      // Also check if user is any approver for this department (for backwards compatibility)
+      const departmentApprovers = await storage.getDepartmentApprovers(leaveRequest.department);
+      const isDepartmentApprover = departmentApprovers.some(a => a.approverUserId === userId);
+      
+      if (!isHrOrAdmin && !isDesignatedApprover && !isDepartmentApprover) {
         return res.status(403).json({ error: "You are not authorized to reject requests from this department" });
       }
       
@@ -633,6 +649,50 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Set department approver error:", error);
       res.status(500).json({ error: "Failed to set department approver" });
+    }
+  });
+
+  app.post("/api/settings/department-approvers/:department", requireAuth, requireITDepartment, async (req, res) => {
+    try {
+      const { approverUserId } = req.body;
+      const { department } = req.params;
+      
+      if (!approverUserId) {
+        return res.status(400).json({ error: "approverUserId is required" });
+      }
+      
+      const user = await storage.getUser(approverUserId);
+      if (!user) {
+        return res.status(404).json({ error: "Approver user not found" });
+      }
+      
+      const approver = await storage.addDepartmentApprover(department, approverUserId);
+      res.status(201).json(approver);
+    } catch (error) {
+      console.error("Add department approver error:", error);
+      res.status(500).json({ error: "Failed to add department approver" });
+    }
+  });
+
+  app.delete("/api/settings/department-approvers/:id", requireAuth, requireITDepartment, async (req, res) => {
+    try {
+      await storage.removeDepartmentApprover(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Remove department approver error:", error);
+      res.status(500).json({ error: "Failed to remove department approver" });
+    }
+  });
+
+  // Get approvers for a specific department (for leave filing dropdown)
+  app.get("/api/department-approvers/:department", requireAuth, async (req, res) => {
+    try {
+      const { department } = req.params;
+      const approvers = await storage.getDepartmentApprovers(department);
+      res.json(approvers);
+    } catch (error) {
+      console.error("Get department approvers error:", error);
+      res.status(500).json({ error: "Failed to get department approvers" });
     }
   });
 

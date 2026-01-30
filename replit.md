@@ -98,6 +98,11 @@ A comprehensive Employee Leave Tracker Tool for GTO Trading Corporation serving 
 - 2026-01-17: Approval workflow updated to route only to designated approvers or HR/Admin
 - 2026-01-17: Custom email/password authentication with bcrypt hashing
 - 2026-01-17: Sessions stored in PostgreSQL via connect-pg-simple
+- 2026-01-30: Multiple approvers per department support
+- 2026-01-30: Approver selection dropdown in file-leave page (filtered by department)
+- 2026-01-30: Settings page updated to add/remove multiple approvers per department
+- 2026-01-30: Any user can be assigned as department approver (no role restriction)
+- 2026-01-30: Approver is optional when no approvers configured (routes to HR/Admin)
 - 2026-01-17: Email validation accepts both @gtotradingcorp.com and @gmail.com domains
 - 2026-01-17: Registration captures all employee data (employeeId, department, position, level) upfront
 - 2026-01-17: Added Settings page (/settings) for IT department and admins to configure department approvers
